@@ -11,6 +11,10 @@ given from the Spotify Metadata API.
 Built on Python 2.7 to allow creation of Django app.  At this time,
 Django does not support Python 3.
 
+TODO:
+Best Duration
+
+
 ---------------------------------------------------------------------
 """
 
@@ -165,7 +169,7 @@ class SpotifyPoem(dict):
                 
     def removePunctuation( self, phrase):
         """Remove simple punctuation, but leave apostrophe"""
-        return ''.join (re.split(r'[,;!?_-]', phrase.lower()) )
+        return ''.join (re.split(r'[,;!?_-]', phrase) )
                          
     def returnLines(self, text):
         """Split given entry into separate lines."""
@@ -191,8 +195,9 @@ class SpotifyPoem(dict):
         
     def mapWords(self):
         """Initial mapping or overall poem, to map word locations for correlation later."""
-        self['wordmap'] = [ n.lower() for n in  self.cleanWordSplit( self['original poem']) if n ]
+        self['wordmap'] = [ n for n in  self.cleanWordSplit( self['original poem']) if n ]
         self['location list'] = range( 0, len( self['wordmap']) )
+        log.info("Word mapping for search string: %s", self['wordmap'])
         log.info("Search term location list: %s", self['location list'])
         
     def getLocations(self, term):
@@ -208,14 +213,18 @@ class SpotifyPoem(dict):
         locations = []
         if words:
             #Finding the positions of the word queries, to avoid duplication and set multiple locations
-            begins = [ i for i in range( 0 , len( self['wordmap'] )) if self['wordmap'][i] == words[0] ]
-            log.debug("Beginning positions of words in queries: %s", begins)
-            if begins:
-                for begin in begins:
-                    if words == self['wordmap'][ begin : begin + len(words) ]:
-                        log.debug('Found locations %s', range( begin, begin + len(words) ) )
-                        locations.append( [ j for j in range( begin, begin + len(words)) ] )
-            #print "in get locations",locations
+            start_positions = [ i for i in range( 0 , len( self['wordmap'] )) if self['wordmap'][i].lower() == words[0].lower() ]
+            log.debug("Beginning positions of words in queries: %s", start_positions)
+            if start_positions:
+                for start_position in start_positions:
+                    #If list of words is equal to the same list slice of the wordmap, append to the location map
+                    complist1 = [ a.lower() for a in words ]
+                    complist2 = [ b.lower() for b in self['wordmap'][ start_position : start_position + len(words) ] ]
+                    # The comparison is split into the two phrases above for clarity, and to make sure both are compared lowercase.
+                    if complist1 == complist2:
+                        log.debug('Found locations %s', range( start_position, start_position + len(words) ) )
+                        locations.append( [ j for j in range( start_position, start_position + len(words)) ] )
+                        
             return locations         
         return None
 
@@ -227,19 +236,19 @@ class SpotifyPoem(dict):
         # First we add the entire string to the search queue:
         self.isUniqueSearchTerm( self['original poem'] )
         
-        queue.put( { 'query' : self['original poem'].strip().lower() , 'locations' : [self['location list']] })
+        queue.put( { 'query' : self['original poem'].strip(), 'locations' : [self['location list']] })
         
         # Next we will split the original poem by lines
         for line in self.returnLines( self['original poem'] ):
             if self.isUniqueSearchTerm(line):
                 log.debug("Line splitting search terms locations, line(string) %s and locations(list) %s", line, self.getLocations(line))
-                queue.put( { 'query' : line.strip().lower() , 'locations' : self.getLocations(line) } )
+                queue.put( { 'query' : line.strip(), 'locations' : self.getLocations(line) } )
         
         # And finally split by word
         for word in self['wordmap']:
             if self.isUniqueSearchTerm(word):
                 log.debug("Word splitting search terms locations, word(string) %s and locations(list) %s", word, self.getLocations(word))
-                queue.put( { 'query' : word.strip().lower() , 'locations' : self.getLocations(word) } )
+                queue.put( { 'query' : word.strip(), 'locations' : self.getLocations(word) } )
                 
         log.debug("Finished filling queue.  Queue is %s", queue.queue )
                 
@@ -288,11 +297,12 @@ class SpotifyPoem(dict):
                     pass
                 except IndexError:
                     pass
-                self['best matches'].append(best_match)
+                self['best matches'].extend(best_match)
             else:
                 #If no match, move on to next location in queue
                 mqueue.pop(0)
             
+        log.info("Final poem object %s", self['best matches'])
         return self['best matches']
     
 class SpotifyAPI():
@@ -331,8 +341,9 @@ class SpotifyAPI():
         try:
             track_data = urllib2.urlopen(request_url, None, SPOTIFY_REQ_TIMEOUT)
             log.debug("Header from request %s", track_data.headers.headers)
-        except URLError:
-            raise URLError
+        except urllib2.URLError:
+            log.error("Connection request to Spotify timed out.")
+            raise urllib2.URLError
 
         return self.parseTrackData(spotquery, track_data)
     
@@ -399,6 +410,11 @@ class SpotifizePoem():
         except KeyboardInterrupt:
             sys.exit()
             
+    def printBestMatches(self):
+        for item in self.spotifize():
+            print "---------------------" + item['track']['query'] + "---------------------------"
+            print item['track']['trackname'] + " by " + item['track']['artist'] + " --> " + item['track']['URL']
+            
 
 if __name__ == '__main__':
     import argparse
@@ -426,8 +442,8 @@ if __name__ == '__main__':
     log.info("Start time is %s", start_time)
     
     spotifizer = SpotifizePoem( rawpoem.decode('utf-8') )
-    final_poem = spotifizer.spotifize()
-    log.info("Final poem object %s", final_poem)
+    spotifizer.printBestMatches()
+
     
     #end timer
     print "Spotifized in %s secs" % (time.time() - start_time)
