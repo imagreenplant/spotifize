@@ -100,7 +100,7 @@ class Match(dict):
 
     def __weightWordCount(self):
         """Returns weighting for the number of words in a match term"""
-        #print 'Word weight is ', WORD_WEIGHT * len(self['track']['trackname'].split(' '))
+        log.info( 'Word weight for %s is %d', self['track']['trackname'], WORD_WEIGHT * len(self['track']['trackname'].split(' ')) )
         return WORD_WEIGHT * len(self['track']['trackname'].split(' ')) #needs to account for line breaks and multiple whitespaces
         
     def __weightCadence(self):
@@ -114,7 +114,7 @@ class Match(dict):
         
         syllable_number = len( [syl for syl in re.findall(r'[aeiou]+', self['track']['trackname'].lower())  if syl ]  )
         if syllable_number < 8 and syllable_number > 2:
-            #print "Syllabic weight is ", SYLLABIC_CADENCE
+            log.info( "Syllabic weight for %s is %d", self['track']['trackname'], SYLLABIC_CADENCE )
             return SYLLABIC_CADENCE
         else:
             return 0
@@ -122,7 +122,7 @@ class Match(dict):
     def __weightPopularity(self):
         """Applies weighting from popularity"""
         try:
-            #print "Popularity weight is ", POPULARITY_WEIGHT_FACTOR * float( self['track']['popularity'] )
+            log.info( "Popularity weight for %s is %d", self['track']['trackname'] ,POPULARITY_WEIGHT_FACTOR * float( self['track']['popularity'] ) )
             return POPULARITY_WEIGHT_FACTOR * float( self['track']['popularity'] )
         except ValueError:
             return 0
@@ -263,9 +263,7 @@ class SpotifyPoem(dict):
                 log.debug("Searching for locations matches, possible location(int) %s, and location set(list) %s" , location , location_set)
                 if location in location_set:
                     matched_locations.append(match)
-        
         return matched_locations
-        #return [ match for match in self['matches'] if location in match['track']['locations'] ]
                 
     def returnTopLocationMatches(self, matches, amount = 1):
         """Returns the best matches for the location in the amount given."""
@@ -288,10 +286,8 @@ class SpotifyPoem(dict):
                 try:
                     # Removing the locations from only the best match, to move on
                     for loc in best_match[0]['track']['locations']:
-                        #print "loc", loc
                         if loc[0] == mqueue[0]:
                             [ mqueue.remove(digit) for digit in loc ]
-                    #[ mqueue.remove(loc) for loc in best_match[0]['track']['locations'][0] ]
                 except ValueError:
                     # Passing here.  Any extra locations removed are not a problem, and we simply move on.
                     pass
