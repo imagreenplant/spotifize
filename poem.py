@@ -145,6 +145,7 @@ class SpotifyPoem(dict):
         dict.__init__(self)
         self['original poem'] = rawpoem
         self['matches'] = []
+        self['unmatched'] = []
         self['search terms'] = []
         self['wordmap'] = None
         self['location list'] =  None
@@ -160,13 +161,7 @@ class SpotifyPoem(dict):
 
                 # Instantiate and append new match objects to the master poem list
                 self['matches'].append( Match(track) )
-                
-            elif track['trackname'].lower() in track['query'].lower():
-                track['exact match'] =  False
-                log.info("Subset match found(s): %s", track['trackname'] )
-                
-                self['matches'].append( Match(track) )
-                
+
     def removePunctuation( self, phrase):
         """Remove simple punctuation, but leave apostrophe"""
         return ''.join (re.split(r'[,;!?_-]', phrase) )
@@ -258,10 +253,10 @@ class SpotifyPoem(dict):
         log.debug("getMatchesForLocation() Location to be found(int): %s", location)
         matched_locations = []
         for match in self['matches']:
-            log.debug("Match < %s , %s > in self['matches']", match['track']['trackname'], match['track']['locations'] )
             for location_set in match['track']['locations']:
                 log.debug("Searching for locations matches, possible location(int) %s, and location set(list) %s" , location , location_set)
                 if location in location_set:
+                    log.info("Found match %s for this location %s" , match['track']['trackname'], location)
                     matched_locations.append(match)
         return matched_locations
                 
