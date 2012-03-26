@@ -70,7 +70,7 @@ White and Pretty!
 # on necessity after testing. """
 
 BEST_EFFORT_DURATION_LIMIT = 20     # Time limit for how long the Poemizer can run 
-SPOTIFY_REQ_TIMEOUT = 2             # Timeout to wait for spotify's response
+SPOTIFY_REQ_TIMEOUT = 5             # Timeout to wait for spotify's response
 TOTAL_THREADCOUNT = 5               # Total number of threads to use making connections
 
 #Language Weighting
@@ -376,9 +376,7 @@ class SpotifyConnThread(threading.Thread):
                 if not self.poem.matchedPrevious(spotquery):
                     self.poem.match( SpotifyAPI( self.poem ).getTrackMatches( spotquery ))
             except Exception, e:
-                #Re-insert query back onto queue in case of failure
                 log.exception("Exception in thread, %s", e)
-                self.spotqueue.put(spotquery)
             finally:
                 self.spotqueue.task_done()
 
