@@ -151,17 +151,34 @@ class SpotifyPoem(dict):
         self['location list'] =  None
         self['best matches'] = []
             
+    def __addMatch(self, track_object):
+        """Add Match objects to the matches list"""
+        track_object['exact match'] =  True
+        log.info("Exact match found(s): %s", track_object['trackname'] )
+
+        # Instantiate and append new match objects to the master poem list
+        self['matches'].append( Match(track_object) )
+
+    
     def match(self, query_data):
         """Looks for string matches provided in file/url object"""
         
         for track in query_data:
             if track['trackname'].lower() == track['query'].lower():
-                track['exact match'] =  True
-                log.info("Exact match found(s): %s", track['trackname'] )
-
-                # Instantiate and append new match objects to the master poem list
-                self['matches'].append( Match(track) )
-
+                self.__addMatch(track)
+            else:
+                self['unmatched'].append( track )
+                
+    def matchedPrevious(self, query):
+        """Function to help dig into old Spotify Metadata request to skim for unused matches that may fit"""
+        for track in self['unmatched']:
+            log.debug("Testing for previous match.  Query is <%s> and trackname is <%s>", query, track['trackname'])
+            if track['trackname'].lower() == query['query'].lower():
+                self.__addMatch(track)
+                return True
+        return False
+        # may need to remove from unmatched list, depending on later flow        
+                
     def removePunctuation( self, phrase):
         """Remove simple punctuation, but leave apostrophe"""
         return ''.join (re.split(r'[,;!?_-]', phrase) )
@@ -355,7 +372,9 @@ class SpotifyConnThread(threading.Thread):
             log.debug("Processing ---%s--- in queue", spotquery)
             
             try:
-                self.poem.match( SpotifyAPI( self.poem ).getTrackMatches( spotquery ))
+                #Search previous matches, and if nothing, connect to Spotify for search
+                if not self.poem.matchedPrevious(spotquery):
+                    self.poem.match( SpotifyAPI( self.poem ).getTrackMatches( spotquery ))
             except Exception, e:
                 #Re-insert query back onto queue in case of failure
                 log.exception("Exception in thread, %s", e)
@@ -380,7 +399,6 @@ class SpotifizePoem():
             queue = Queue.Queue()
             
             poem = SpotifyPoem(self.getRawPoemInput())
-            #poem = SpotifyPoem()
             
             #Fill queue with search terms from poem
             poem.fillQueue(queue)
