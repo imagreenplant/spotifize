@@ -39,31 +39,6 @@ SPOTIFY_QUERY_URL = "http://ws.spotify.com/search/1/track?%s"
 SPOTIFY_OUTPUT_URL = "http://open.spotify.com/track/%s"        #Insert song token, i.e. href="spotify:track:7Bc0S4rnNF06apWGfK2S3G"
 NS = {'sp':"http://www.spotify.com/ns/music/1"}                #Namespace definition for XML parsing
 
-#Setup logging
-log = logging.getLogger('spotifize')
-log.setLevel( logging.DEBUG )
-formatting = logging.Formatter('%(asctime)-6s: - %(levelname)s - %(lineno)d - %(funcName)s - %(threadName)s - %(message)s')
-log_handler = logging.StreamHandler()
-log_handler.setFormatter(formatting)
-log.addHandler( log_handler )
-log.info("Initializing Spotifizer")
-
-"""
-Testing:
-http://spotifypoetry.tumblr.com/
-"""
-
-TEST_POEM = """Snow Day
-Watch It Fall
-White and Pretty
-Let's Have a Ball
-Let's Make a Snowman_
-Go Out and Play-
-Let's Have some fun;
-Just For Today,
-White and Pretty!
-"""
-
 # ----------------------Tweaks --------------------------------------
 # There are extra tweaks here that have been commented out.  These would
 # be some additional 'sliders' I would implement to improve results depending
@@ -83,7 +58,20 @@ SYLLABIC_CADENCE = 0.6              # string has between 2 and 6 syllables
 POPULARITY_WEIGHT_FACTOR = 2        # factor of how much popularity matters
 # ------------------------------------------------------------------
     
+    
+#Setup logging
+log = logging.getLogger('spotifize')
+log.setLevel( logging.DEBUG )
+formatting = logging.Formatter('%(asctime)-6s: - %(levelname)s - %(lineno)d - %(funcName)s - %(threadName)s - %(message)s')
+log_handler = logging.StreamHandler()
+log_handler.setFormatter(formatting)
+log.addHandler( log_handler )
+log.info("Initializing Spotifizer")
+
+
+
 class Match(dict):
+
     """
     Object to store one single match, be it one word or longer
     
@@ -140,6 +128,7 @@ class Match(dict):
 
 
 class SpotifyPoem(dict):
+    
     """store spotify poem metadata, parses itself and adds weighting"""
     def __init__(self, rawpoem = TEST_POEM):
         dict.__init__(self)
@@ -314,6 +303,7 @@ class SpotifyPoem(dict):
         return self['best matches']
     
 class SpotifyAPI():
+    
     """Class for connecting to Spotify API and parsing terms"""
 
     # tags from Spotify Metadata wanted for later consumption, includes namespaces and path
@@ -358,6 +348,7 @@ class SpotifyAPI():
 
 
 class SpotifyConnThread(threading.Thread):
+    
     """Creates thread to query Spotify Metadata and parse"""
     
     def __init__(self, spotqueue, poem):
@@ -366,7 +357,7 @@ class SpotifyConnThread(threading.Thread):
         self.poem = poem
         
     def run(self):
-        while True:    #possibly modify this to stop any new threads from starting before duration
+        while True:
             spotquery = self.spotqueue.get()
             
             log.debug("Processing ---%s--- in queue", spotquery)
@@ -380,8 +371,14 @@ class SpotifyConnThread(threading.Thread):
             finally:
                 self.spotqueue.task_done()
 
+class TimeoutError(Exception):
+    """Defines Timeout error is best effort duration is reached."""
+    def __init__(self):
+        self.duration = BEST_EFFORT_DURATION_LIMIT
+        
 class SpotifizePoem():
-    """Main action class for taking a poem and creating a Spotify playlist"""
+    
+    """Main controller class for taking a poem and creating a Spotify playlist"""
     
     def __init__(self, poem_text):
         self.poem_text = poem_text
@@ -392,6 +389,10 @@ class SpotifizePoem():
     
     def spotifize(self):
         """Runs the poem spotifizer"""
+
+        start_time = time.time()
+        log.info("Start time is %s", start_time)
+        
         try:
             #initiate threading queue
             queue = Queue.Queue()
@@ -411,11 +412,15 @@ class SpotifizePoem():
             #process queue
             queue.join()
             
+            log.info("Spotifized in %s secs" % (time.time() - start_time) )
+            
             #sort best output data
             return poem.returnPoemMatch()
         
         except KeyboardInterrupt:
             sys.exit()
+            
+        except 
             
     def printBestMatches(self):
         for item in self.spotifize():
@@ -444,16 +449,12 @@ if __name__ == '__main__':
         rawpoem = f.read()
     elif args.text:
         rawpoem = args.text
-    #start timer
-    start_time = time.time()
-    log.info("Start time is %s", start_time)
-    
+
     spotifizer = SpotifizePoem( rawpoem.decode('utf-8') )
     spotifizer.printBestMatches()
 
     
-    #end timer
-    print "Spotifized in %s secs" % (time.time() - start_time)
+
     
 """
 Things to Improve with More Time:
