@@ -44,7 +44,7 @@ NS = {'sp':"http://www.spotify.com/ns/music/1"}                #Namespace defini
 # be some additional 'sliders' I would implement to improve results depending
 # on necessity after testing. """
 
-BEST_EFFORT_DURATION_LIMIT = 20     # Time limit for how long the Poemizer can run 
+BEST_EFFORT_DURATION_LIMIT = 1     # Time limit for how long the Poemizer can run 
 SPOTIFY_REQ_TIMEOUT = 5             # Timeout to wait for spotify's response
 TOTAL_THREADCOUNT = 5               # Total number of threads to use making connections
 
@@ -69,6 +69,11 @@ log.addHandler( log_handler )
 log.info("Initializing Spotifizer")
 
 
+class TimeoutError(Exception):
+    """Defines Timeout error is best effort duration is reached."""
+    def __init__(self):
+        self.duration = BEST_EFFORT_DURATION_LIMIT
+        
 
 class Match(dict):
 
@@ -130,7 +135,7 @@ class Match(dict):
 class SpotifyPoem(dict):
     
     """store spotify poem metadata, parses itself and adds weighting"""
-    def __init__(self, rawpoem = TEST_POEM):
+    def __init__(self, rawpoem):
         dict.__init__(self)
         self['original poem'] = rawpoem
         self['matches'] = []
@@ -161,8 +166,9 @@ class SpotifyPoem(dict):
     def matchedPrevious(self, query):
         """Function to help dig into old Spotify Metadata request to skim for unused matches that may fit"""
         for track in self['unmatched']:
-            log.debug("Testing for previous match.  Query is <%s> and trackname is <%s>", query, track['trackname'])
+            #log.debug("Testing for previous match.  Query is <%s> and trackname is <%s>", query, track['trackname'])
             if track['trackname'].lower() == query['query'].lower():
+                log.info("Previously stored match found. Query is <%s> and trackname is <%s>", query, track['trackname'])
                 self.__addMatch(track)
                 return True
         return False
@@ -351,30 +357,34 @@ class SpotifyConnThread(threading.Thread):
     
     """Creates thread to query Spotify Metadata and parse"""
     
-    def __init__(self, spotqueue, poem):
+    def __init__(self, spotqueue, poem, durationExceeded, exc_catch):
         threading.Thread.__init__(self)
         self.spotqueue = spotqueue
         self.poem = poem
+        self.durationExceeded = durationExceeded
+        self.exc_catch = exc_catch
         
     def run(self):
-        while True:
-            spotquery = self.spotqueue.get()
-            
-            log.debug("Processing ---%s--- in queue", spotquery)
-            
-            try:
-                #Search previous matches, and if nothing, connect to Spotify for search
-                if not self.poem.matchedPrevious(spotquery):
-                    self.poem.match( SpotifyAPI( self.poem ).getTrackMatches( spotquery ))
-            except Exception, e:
-                log.exception("Exception in thread, %s", e)
-            finally:
-                self.spotqueue.task_done()
+        try:
+            while True:
+                if self.durationExceeded():
+                    raise TimeoutError
+                spotquery = self.spotqueue.get()
+                
+                log.debug("Processing ---%s--- in queue", spotquery)
+                
+                try:
+                    #Search previous matches, and if nothing, connect to Spotify for search
+                    if not self.poem.matchedPrevious(spotquery):
+                        self.poem.match( SpotifyAPI( self.poem ).getTrackMatches( spotquery ))
+                except Exception, e:
+                    log.exception("Exception in thread, %s", e)
+                finally:
+                    self.spotqueue.task_done()
+        except TimeoutError:
+            self.exc_catch.put(sys.exc_info())
 
-class TimeoutError(Exception):
-    """Defines Timeout error is best effort duration is reached."""
-    def __init__(self):
-        self.duration = BEST_EFFORT_DURATION_LIMIT
+
         
 class SpotifizePoem():
     
@@ -382,37 +392,67 @@ class SpotifizePoem():
     
     def __init__(self, poem_text):
         self.poem_text = poem_text
+        self.start_time = None
         
     def getRawPoemInput(self):
         """Get poem input"""
         return self.poem_text
+
+    def durationExceeded(self):
+        """Check to see if duration of program has been exceeded"""
+        
+        log.info("Current program duration at %s", time.time() - self.start_time )
+        if time.time() - self.start_time > BEST_EFFORT_DURATION_LIMIT:
+            log.warn("Best effort duration exceeded.  Will start shutting down.")
+            return True
+        else:
+            return False
     
     def spotifize(self):
         """Runs the poem spotifizer"""
 
-        start_time = time.time()
-        log.info("Start time is %s", start_time)
+        self.start_time = time.time()
+        log.info("Start time is %s", self.start_time)
         
         try:
             #initiate threading queue
             queue = Queue.Queue()
             
+            # This will be used to catch exceptions from the running threads.
+            exc_q = Queue.Queue()
+            
+            # Creates poem object from poem text input
             poem = SpotifyPoem(self.getRawPoemInput())
             
-            #Fill queue with search terms from poem
+            # Fill queue with search terms from poem
             poem.fillQueue(queue)
             
-            #spawn threads
+            
+            
+            # Spawn threads for analysis
             for j in range( TOTAL_THREADCOUNT ):
                 log.debug("Creating thread %s", j)
-                thr = SpotifyConnThread( queue, poem )
+                thr = SpotifyConnThread( queue, poem, self.durationExceeded, exc_q )
                 thr.setDaemon(True)
                 thr.start()
-    
-            #process queue
-            queue.join()
             
-            log.info("Spotifized in %s secs" % (time.time() - start_time) )
+            exception = False
+            while True:
+                try:
+                    if exception:
+                        log.warn("Found exception <%s> in threads, beginning shutdown.", exception)
+                        break
+                    elif queue.empty():
+                        queue.join()
+                        break
+                    exception = exc_q.get(block=False)
+                    log.info("Queue size is %d", queue.qsize() )
+
+                except Queue.Empty:
+                    pass
+                
+            
+            log.info("Spotifized in %s secs" % (time.time() - self.start_time) )
             
             #sort best output data
             return poem.returnPoemMatch()
@@ -420,9 +460,10 @@ class SpotifizePoem():
         except KeyboardInterrupt:
             sys.exit()
             
-        except 
-            
     def printBestMatches(self):
+        print "\n++++++++++++++++++++++++++++++ Original Poem +++++++++++++++++++++++++++++++++"
+        print self.poem_text,
+        print "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n"
         for item in self.spotifize():
             print "---------------------" + item['track']['query'] + "---------------------------"
             print item['track']['trackname'] + " by " + item['track']['artist'] + " --> " + item['track']['URL']
