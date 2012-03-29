@@ -44,7 +44,7 @@ NS = {'sp':"http://www.spotify.com/ns/music/1"}                #Namespace defini
 # be some additional 'sliders' I would implement to improve results depending
 # on necessity after testing. """
 
-BEST_EFFORT_DURATION_LIMIT = 1     # Time limit for how long the Poemizer can run 
+BEST_EFFORT_DURATION_LIMIT = 30     # Time limit for how long the Poemizer can run 
 SPOTIFY_REQ_TIMEOUT = 5             # Timeout to wait for spotify's response
 TOTAL_THREADCOUNT = 5               # Total number of threads to use making connections
 
@@ -61,7 +61,7 @@ POPULARITY_WEIGHT_FACTOR = 2        # factor of how much popularity matters
     
 #Setup logging
 log = logging.getLogger('spotifize')
-log.setLevel( logging.DEBUG )
+log.setLevel( logging.ERROR )
 formatting = logging.Formatter('%(asctime)-6s: - %(levelname)s - %(lineno)d - %(funcName)s - %(threadName)s - %(message)s')
 log_handler = logging.StreamHandler()
 log_handler.setFormatter(formatting)
@@ -166,13 +166,11 @@ class SpotifyPoem(dict):
     def matchedPrevious(self, query):
         """Function to help dig into old Spotify Metadata request to skim for unused matches that may fit"""
         for track in self['unmatched']:
-            #log.debug("Testing for previous match.  Query is <%s> and trackname is <%s>", query, track['trackname'])
             if track['trackname'].lower() == query['query'].lower():
                 log.info("Previously stored match found. Query is <%s> and trackname is <%s>", query, track['trackname'])
                 self.__addMatch(track)
                 return True
-        return False
-        # may need to remove from unmatched list, depending on later flow        
+        return False     
                 
     def removePunctuation( self, phrase):
         """Remove simple punctuation, but leave apostrophe"""
@@ -210,7 +208,7 @@ class SpotifyPoem(dict):
     def getLocations(self, term):
         """Algorithm to determine a given term's location(s) within the overall poem."""
         
-        #initiate word map if non-existent
+        #initiate word map
         if not self['wordmap']:
             self.mapWords()
             
@@ -248,7 +246,7 @@ class SpotifyPoem(dict):
         # Next we will split the original poem by lines
         for line in self.returnLines( self['original poem'] ):
             if self.isUniqueSearchTerm(line):
-                log.debug("Line splitting search terms locations, line(string) %s and locations(list) %s", line, self.getLocations(line))
+                log.debug("Line splitting search terms locations, line(string) '%s' and locations(list) %s", line, self.getLocations(line))
                 queue.put( { 'query' : line.strip(), 'locations' : self.getLocations(line) } )
         
         # And finally split by word
@@ -347,7 +345,7 @@ class SpotifyAPI():
             log.debug("Header from request %s", track_data.headers.headers)
         except urllib2.URLError:
             log.error("Connection request to Spotify timed out.")
-            raise urllib2.URLError
+            raise urllib2.URLError("Request to Spotify API has timed out")
 
         return self.parseTrackData(spotquery, track_data)
     
@@ -382,6 +380,7 @@ class SpotifyConnThread(threading.Thread):
                 finally:
                     self.spotqueue.task_done()
         except TimeoutError:
+            # Adds exception caught to Queue which can communicate with main thread.
             self.exc_catch.put(sys.exc_info())
 
 
@@ -500,14 +499,16 @@ if __name__ == '__main__':
 """
 Things to Improve with More Time:
 - More intelligent Algorithm to determine more 'human-ish' poetry entries, as in better semantic structure
-- Research more Exceptions to protect the program
 - Do more taste testing of the results with other people
 - Allow for more fuzzy terms, like searching for "I am" when "I'm" is inputted
 - Also fuzzy the number of words, breaking a 3 word line into 5 possibilities, instead of 3
-- Match subsets from same API request, instead of making a second request
 - Do second queue for putting new search items up for processing
-- For suggestions in the case of no match, would use Levenshtein library for word similarity
-- account for searches with an apostrophe, matching "I'm" and "Im" or "Let's" and "Lets"
+-- Reinsert search items onto the queue, with some intelligence to dig further into the spotify api, as the first
+   page doesn't return results.  The Spotify API favors popular songs in the returns that may not be exact matches
+   for terms like "too" or "I" or "Who Loves", where most of these are usually connected with other words.
+- For suggestions in the case of no match, would use Levenshtein library for word similarity.
+- Currently the program stores all the results, but only grabs exact matches.  Could return the top 5 related
+  matches pretty easily i.e. searching for "Who Loves" may return "Who Loves You" "Who Loves Me" etc.
 """
  
 
