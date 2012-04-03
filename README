@@ -1,13 +1,9 @@
 Spotifizer
 
-A commandline utility to allow one to "spotifize" a poem.  The utility will search for songs 
-whose titles match the lyrics within a submitted poem.  For instance, inputting a text file
-whose contents are "You Can't Always Get What You Want" will likely return the same song from 
-the Rolling Stones, and a link to it.  This utility will search by-line, and by-word.
+A commandline utility to allow one to "spotifize" a poem.  The utility will search for songs whose titles match the lyrics within a submitted poem.  For instance, inputting a text file whose contents are "You Can't Always Get What You Want" will likely return the same song from the Rolling Stones, and a link to it.  This utility will search by-line, and by-word.
 
 Some features:
-- A best effort duration limiter, upon reaching the limit will grab what results it already has
-    and spit them out
+- A best effort duration limiter, upon reaching the limit will grab what results it already has and spit them out
 - Multiple threads for making multiple requests to the spotify metadata API
 - Match weighting, to allow tweaks to which types of matches are created.
 - Reads in from a file or text input at the commandline.
