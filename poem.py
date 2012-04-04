@@ -487,6 +487,8 @@ if __name__ == '__main__':
     if args.file:
         f = open( args.file, 'r')
         rawpoem = f.read()
+        f.close()
+        
     elif args.text:
         rawpoem = args.text
 
